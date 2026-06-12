@@ -1,10 +1,11 @@
 FROM golang:1.21-alpine
 
+ARG GOPROXY=https://goproxy.cn,direct
+ENV GOPROXY=${GOPROXY}
+
 WORKDIR /app
 
 RUN apk add --no-cache git
-
-RUN go install github.com/cosmtrek/air@latest
 
 COPY go.mod go.sum ./
 RUN go mod download

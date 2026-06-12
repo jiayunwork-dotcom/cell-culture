@@ -102,7 +102,7 @@ export default function DifferentiationPanel({
         {DIFFERENTIATION_TYPES.map(type => (
           <div 
             key={type.id}
-            className={`${type.bgColor ${type.borderColor} border rounded-xl p-4 cursor-pointer transition-all ${
+            className={`${type.bgColor} ${type.borderColor} border rounded-xl p-4 cursor-pointer transition-all ${
               selectedType === type.id ? 'ring-2 ring-white scale-105' : 'hover:scale-102'
             }`}
             onClick={() => !disabled && setSelectedType(type.id)}

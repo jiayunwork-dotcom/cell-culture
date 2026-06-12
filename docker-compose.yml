@@ -33,6 +33,8 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      args:
+        GOPROXY: https://goproxy.cn,direct
     ports:
       - "8080:8080"
     depends_on:
@@ -49,9 +51,6 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       WS_PORT: 8080
-    volumes:
-      - ./backend:/app
-    command: air
 
   frontend:
     build:
