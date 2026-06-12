@@ -118,7 +118,7 @@ export default function GamePage({
             </div>
             <div className="flex items-center gap-2">
               <Users className="w-5 h-5 text-secondary" />
-              <span>{Object.keys(gameState?.players || {}).length} / {gameState?.room?.maxPlayers}</span>
+              <span>{(gameState?.players || []).length} / {gameState?.room?.maxPlayers}</span>
             </div>
           </div>
         </div>
@@ -128,12 +128,12 @@ export default function GamePage({
         <div className="bg-amber-500/10 border-b border-amber-500/30 py-4 text-center">
           <div className="max-w-7xl mx-auto px-4">
             <p className="text-amber-400 mb-3">
-              等待玩家加入... ({Object.keys(gameState?.players || {}).length}/{gameState?.room?.maxPlayers})
+              等待玩家加入... ({(gameState?.players || []).length}/{gameState?.room?.maxPlayers})
             </p>
             <div className="flex justify-center gap-4">
               <button
                 onClick={startGame}
-                disabled={Object.keys(gameState?.players || {}).length < 4}
+                disabled={(gameState?.players || []).length < 4}
                 className="bg-primary hover:bg-green-600 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-semibold px-6 py-2 rounded-lg transition-all"
               >
                 开始游戏
@@ -149,7 +149,7 @@ export default function GamePage({
       {submitted && isPlaying && (
         <div className="bg-green-500/10 border-b border-green-500/30 py-2 text-center">
           <p className="text-green-400 text-sm">
-            ✓ 你已提交本回合操作，等待其他玩家... ({gameState?.submittedCount || 0}/{Object.keys(gameState?.players || {}).length})
+            ✓ 你已提交本回合操作，等待其他玩家... ({gameState?.submittedCount || 0}/{(gameState?.players || []).length})
           </p>
         </div>
       )}

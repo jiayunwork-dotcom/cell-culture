@@ -9,7 +9,7 @@ export default function PlayerList({ players }) {
     <div className="p-3 border-b border-slate-700">
       <h3 className="font-semibold flex items-center gap-2 text-sm mb-3">
         <Users className="w-4 h-4" />
-        玩家 ({sortedPlayers.length}
+        玩家 ({sortedPlayers.length})
       </h3>
       
       <div className="space-y-2">

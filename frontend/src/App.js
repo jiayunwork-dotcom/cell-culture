@@ -26,10 +26,22 @@ function App() {
         setGameState(data.data);
       } else if (data.type === 'joined_room' || data.type === 'room_created') {
         setPlayer(data.data.player);
-        setGameState({
-          ...data.data,
+        const initialState = {
           room: data.data.room,
-        });
+          players: [data.data.player],
+          environment: null,
+          population: null,
+          mutations: [],
+          selection: null,
+          differentiations: [],
+          patents: [],
+          contaminations: [],
+          contracts: [],
+          auctions: [],
+          messages: [],
+          submittedCount: 1,
+        };
+        setGameState(initialState);
       }
     } catch (e) {
       console.error('Failed to parse message:', e);

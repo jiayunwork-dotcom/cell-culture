@@ -70,6 +70,9 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 func (h *Hub) readPump(client *Client) {
 	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("WebSocket panic recovered: %v", r)
+		}
 		h.removeClient(client)
 		client.Conn.Close()
 	}()
@@ -100,11 +103,21 @@ func (h *Hub) writePump(client *Client) {
 }
 
 func (h *Hub) handleMessage(client *Client, message []byte) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("Handle message panic recovered: %v", r)
+			h.sendError(client, "Internal server error")
+		}
+	}()
+
 	var msg WSMessage
 	if err := json.Unmarshal(message, &msg); err != nil {
-		log.Printf("JSON parse error: %v", err)
+		log.Printf("JSON parse error: %v, message: %s", err, string(message))
+		h.sendError(client, "Invalid message format")
 		return
 	}
+
+	log.Printf("Received message: type=%s, client=%s", msg.Type, client.ID)
 
 	switch msg.Type {
 	case "join_room":
@@ -123,6 +136,9 @@ func (h *Hub) handleMessage(client *Client, message []byte) {
 		h.handleStartGame(client)
 	case "get_state":
 		h.handleGetState(client)
+	default:
+		log.Printf("Unknown message type: %s", msg.Type)
+		h.sendError(client, "Unknown message type: "+msg.Type)
 	}
 }
 
@@ -231,6 +247,8 @@ func (h *Hub) handleCreateRoom(client *Client, data interface{}) {
 		},
 	}
 	h.sendToClient(client, response)
+
+	h.broadcastRoomState(room.Room.ID)
 }
 
 func (h *Hub) handleListRooms(client *Client) {

@@ -96,11 +96,14 @@ func (rm *RoomManager) CreateRoom(name string, maxPlayers int, maxTurns int) *Ga
 	defer rm.mu.Unlock()
 
 	room := &models.Room{
-		Name:       name,
-		MaxPlayers: maxPlayers,
-		MaxTurns:   maxTurns,
+		ID:          uuid.New(),
+		Name:        name,
+		MaxPlayers:  maxPlayers,
+		MaxTurns:    maxTurns,
 		CurrentTurn: 0,
-		Status:     "waiting",
+		Status:      "waiting",
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
 	}
 
 	gameRoom := &GameRoom{
@@ -155,10 +158,13 @@ func (gr *GameRoom) AddPlayer(playerName string, color string) (*models.Player, 
 	}
 
 	player := &models.Player{
-		Name:  playerName,
-		Color: color,
-		Money: 1000,
-		Score: 0,
+		ID:        uuid.New(),
+		Name:      playerName,
+		Color:     color,
+		Money:     1000,
+		Score:     0,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
 	}
 
 	gr.Players[player.ID] = &PlayerState{
@@ -170,7 +176,10 @@ func (gr *GameRoom) AddPlayer(playerName string, color string) (*models.Player, 
 	gr.Environments[player.ID] = createDefaultEnvironment(player.ID)
 	gr.Populations[player.ID] = createDefaultPopulation(player.ID)
 	gr.Mutations[player.ID] = make([]models.Mutation, 0)
-	gr.Pressures[player.ID] = &models.SelectionPressure{PlayerID: player.ID}
+	gr.Pressures[player.ID] = &models.SelectionPressure{
+		ID:       uuid.New(),
+		PlayerID: player.ID,
+	}
 	gr.Differentiations[player.ID] = make([]*models.Differentiation, 0)
 	gr.Patents[player.ID] = make([]models.Patent, 0)
 	gr.Contaminations[player.ID] = make([]models.Contamination, 0)
@@ -185,6 +194,7 @@ func (gr *GameRoom) AddPlayer(playerName string, color string) (*models.Player, 
 
 func createDefaultEnvironment(playerID uuid.UUID) *models.CultureEnvironment {
 	return &models.CultureEnvironment{
+		ID:             uuid.New(),
 		PlayerID:       playerID,
 		Glucose:        25,
 		Serum:          10,
@@ -204,6 +214,7 @@ func createDefaultEnvironment(playerID uuid.UUID) *models.CultureEnvironment {
 func createDefaultPopulation(playerID uuid.UUID) *models.CellPopulation {
 	startCells := 100000.0
 	return &models.CellPopulation{
+		ID:             uuid.New(),
 		PlayerID:       playerID,
 		TotalCells:     startCells,
 		G1Phase:        startCells * 0.5,
