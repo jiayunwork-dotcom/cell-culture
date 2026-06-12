@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { FlaskConical, Users, DollarSign, Trophy, MessageCircle, Gavel, Dna, ThermometerSun, Zap, Send } from 'lucide-react';
+import { FlaskConical, Users, DollarSign, Trophy, MessageCircle, Gavel, Dna, ThermometerSun, Zap, Send, ClipboardList, Play } from 'lucide-react';
 import EnvironmentPanel from '../components/EnvironmentPanel';
 import CellStatusPanel from '../components/CellStatusPanel';
 import MutationPanel from '../components/MutationPanel';
@@ -8,6 +8,7 @@ import DifferentiationPanel from '../components/DifferentiationPanel';
 import ChatPanel from '../components/ChatPanel';
 import AuctionPanel from '../components/AuctionPanel';
 import PlayerList from '../components/PlayerList';
+import ExperimentLog from '../components/ExperimentLog';
 
 export default function GamePage({ 
   gameState, 
@@ -16,7 +17,8 @@ export default function GamePage({
   startGame,
   sendChat,
   placeBid,
-  wsConnected 
+  wsConnected,
+  onStartReplay
 }) {
   const [activeTab, setActiveTab] = useState('environment');
   const [environment, setEnvironment] = useState(gameState?.environment || {});
@@ -80,6 +82,7 @@ export default function GamePage({
     { id: 'selection', label: '选择压力', icon: Zap },
     { id: 'differentiation', label: '干细胞分化', icon: FlaskConical },
     { id: 'auction', label: '拍卖市场', icon: Gavel },
+    { id: 'log', label: '实验日志', icon: ClipboardList },
   ];
 
   return (
@@ -221,6 +224,9 @@ export default function GamePage({
                 onPlaceBid={placeBid}
               />
             )}
+            {activeTab === 'log' && (
+              <ExperimentLog timeline={gameState?.timeline || []} />
+            )}
           </div>
 
           {isPlaying && (
@@ -316,12 +322,21 @@ export default function GamePage({
                   </div>
                 ))}
             </div>
-            <button
-              onClick={() => window.location.reload()}
-              className="w-full bg-primary hover:bg-green-600 text-white font-semibold py-3 rounded-lg transition-all"
-            >
-              再来一局
-            </button>
+            <div className="flex gap-3">
+              <button
+                onClick={onStartReplay}
+                className="flex-1 bg-secondary hover:bg-cyan-600 text-white font-semibold py-3 rounded-lg transition-all flex items-center justify-center gap-2"
+              >
+                <Play className="w-5 h-5" />
+                回放
+              </button>
+              <button
+                onClick={() => window.location.reload()}
+                className="flex-1 bg-primary hover:bg-green-600 text-white font-semibold py-3 rounded-lg transition-all"
+              >
+                再来一局
+              </button>
+            </div>
           </div>
         </div>
       )}

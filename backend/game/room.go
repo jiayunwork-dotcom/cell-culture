@@ -1,10 +1,13 @@
 package game
 
 import (
+	"encoding/json"
 	"errors"
+	"strconv"
 	"sync"
 	"time"
 
+	"cell-culture/db"
 	"cell-culture/models"
 
 	"github.com/google/uuid"
@@ -282,6 +285,15 @@ func (gr *GameRoom) processTurn() {
 		return
 	}
 
+	prevPops := make(map[uuid.UUID]float64)
+	prevMoney := make(map[uuid.UUID]float64)
+	prevMutCount := make(map[uuid.UUID]int)
+	for pid := range gr.Players {
+		prevPops[pid] = gr.Populations[pid].TotalCells
+		prevMoney[pid] = gr.Players[pid].Player.Money
+		prevMutCount[pid] = len(gr.Mutations[pid])
+	}
+
 	gr.applyPlayerActions()
 	gr.simulateCellCycles()
 	gr.simulateMutations()
@@ -294,6 +306,9 @@ func (gr *GameRoom) processTurn() {
 	gr.resolveEconomy()
 	gr.triggerRandomEvents()
 	gr.calculateScores()
+
+	gr.recordTurnLogs(prevPops, prevMoney, prevMutCount)
+	gr.recordTurnSnapshot()
 
 	gr.Room.CurrentTurn++
 
@@ -826,4 +841,172 @@ func (gr *GameRoom) GetPublicState() map[string]interface{} {
 		"auctions":       gr.Auctions,
 		"messages":       gr.Messages,
 	}
+}
+
+func (gr *GameRoom) recordTurnLogs(prevPops map[uuid.UUID]float64, prevMoney map[uuid.UUID]float64, prevMutCount map[uuid.UUID]int) {
+	if db.DB == nil {
+		return
+	}
+
+	turnNum := gr.Room.CurrentTurn
+	engine := NewGameEngine()
+
+	for playerID := range gr.Players {
+		action := gr.PlayerActions[playerID]
+		ops := make([]string, 0)
+		summaryParts := make([]string, 0)
+
+		if action.Environment != nil {
+			ops = append(ops, "env")
+			summaryParts = append(summaryParts, "调整培养环境")
+		}
+		if action.Mutagen != "" && action.Mutagen != "none" {
+			ops = append(ops, "mutagen")
+			summaryParts = append(summaryParts, "使用诱变剂: "+action.Mutagen)
+		}
+		if action.Selection != nil && (action.Selection.Antibiotic != "" || action.Selection.NutrientLimit != "" || action.Selection.HeatShock || action.Selection.Hypoxia) {
+			ops = append(ops, "selection")
+			summaryParts = append(summaryParts, "施加选择压力")
+		}
+		if action.Passage {
+			ops = append(ops, "passage")
+			summaryParts = append(summaryParts, "传代培养 1/"+fmtFloat(action.PassageRatio))
+		}
+		if action.DiffStart != nil {
+			ops = append(ops, "diff")
+			summaryParts = append(summaryParts, "启动分化: "+action.DiffStart.CellType)
+		}
+		if len(ops) == 0 {
+			ops = append(ops, "idle")
+			summaryParts = append(summaryParts, "未执行操作")
+		}
+
+		prevCells := prevPops[playerID]
+		currCells := gr.Populations[playerID].TotalCells
+		cellDelta := currCells - prevCells
+
+		prevM := prevMoney[playerID]
+		currM := gr.Players[playerID].Player.Money
+		moneyDelta := currM - prevM
+		envCost := engine.CalculateEnvironmentCost(gr.Environments[playerID])
+		patentIncome := engine.CalculatePatentIncome(gr.Mutations[playerID])
+
+		prevMut := prevMutCount[playerID]
+		currMut := len(gr.Mutations[playerID])
+		newMuts := currMut - prevMut
+		if newMuts < 0 {
+			newMuts = 0
+		}
+
+		envJSON, _ := json.Marshal(gr.Environments[playerID])
+		pressureJSON, _ := json.Marshal(gr.Pressures[playerID])
+
+		diffStarted := ""
+		if action.DiffStart != nil {
+			diffStarted = action.DiffStart.CellType
+		}
+
+		log := models.TurnLog{
+			RoomID:         gr.Room.ID,
+			PlayerID:       playerID,
+			TurnNumber:     turnNum,
+			OperationTypes: ops,
+			ActionSummary:  joinStrings(summaryParts, "; "),
+			CellDelta:      cellDelta,
+			NewMutations:   newMuts,
+			MoneyIncome:    100 + patentIncome,
+			MoneyExpense:   envCost,
+			MoneyDelta:     moneyDelta,
+			EnvParams:      string(envJSON),
+			PressureParams: string(pressureJSON),
+			MutagenUsed:    action.Mutagen,
+			MutagenTarget:  action.MutagenTarget,
+			PassageUsed:    action.Passage,
+			PassageRatio:   action.PassageRatio,
+			DiffStarted:    diffStarted,
+			CreatedAt:      time.Now(),
+		}
+		db.DB.Create(&log)
+	}
+}
+
+func (gr *GameRoom) recordTurnSnapshot() {
+	if db.DB == nil {
+		return
+	}
+
+	snapshotData := make(map[string]interface{})
+
+	for playerID, state := range gr.Players {
+		playerSnapshot := map[string]interface{}{
+			"player":          state.Player,
+			"environment":     gr.Environments[playerID],
+			"population":      gr.Populations[playerID],
+			"mutations":       gr.Mutations[playerID],
+			"selection":       gr.Pressures[playerID],
+			"differentiations": gr.Differentiations[playerID],
+			"patents":         gr.Patents[playerID],
+			"contaminations":  gr.Contaminations[playerID],
+			"totalPatentIncome": state.TotalPatentIncome,
+		}
+		snapshotData[playerID.String()] = playerSnapshot
+	}
+
+	dataJSON, _ := json.Marshal(snapshotData)
+
+	snapshot := models.TurnSnapshot{
+		RoomID:       gr.Room.ID,
+		TurnNumber:   gr.Room.CurrentTurn,
+		PlayerStates: string(dataJSON),
+		CreatedAt:    time.Now(),
+	}
+	db.DB.Create(&snapshot)
+}
+
+func (gr *GameRoom) GetTimeline(playerID uuid.UUID) []models.TurnLog {
+	var logs []models.TurnLog
+	if db.DB == nil {
+		return logs
+	}
+	db.DB.Where("room_id = ? AND player_id = ?", gr.Room.ID, playerID).
+		Order("turn_number ASC").
+		Find(&logs)
+	return logs
+}
+
+func (gr *GameRoom) GetAllTimeline() []models.TurnLog {
+	var logs []models.TurnLog
+	if db.DB == nil {
+		return logs
+	}
+	db.DB.Where("room_id = ?", gr.Room.ID).
+		Order("turn_number ASC, player_id ASC").
+		Find(&logs)
+	return logs
+}
+
+func (gr *GameRoom) GetReplaySnapshots() []models.TurnSnapshot {
+	var snapshots []models.TurnSnapshot
+	if db.DB == nil {
+		return snapshots
+	}
+	db.DB.Where("room_id = ?", gr.Room.ID).
+		Order("turn_number ASC").
+		Find(&snapshots)
+	return snapshots
+}
+
+func fmtFloat(f float64) string {
+	return strconv.FormatFloat(f, 'f', 0, 64)
+}
+
+func joinStrings(parts []string, sep string) string {
+	result := ""
+	for i, p := range parts {
+		if i > 0 {
+			result += sep
+		}
+		result += p
+	}
+	return result
 }

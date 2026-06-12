@@ -60,6 +60,8 @@ func InitDB() {
 		&models.Auction{},
 		&models.Contract{},
 		&models.Contamination{},
+		&models.TurnLog{},
+		&models.TurnSnapshot{},
 	)
 	if err != nil {
 		log.Printf("Failed to migrate database: %v", err)

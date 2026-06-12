@@ -3,13 +3,16 @@ package main
 import (
 	"fmt"
 	"log"
+	"net/http"
 
 	"cell-culture/cache"
 	"cell-culture/db"
 	"cell-culture/game"
+	"cell-culture/models"
 	"cell-culture/websocket"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 )
 
@@ -53,6 +56,68 @@ func main() {
 		rooms := roomManager.ListRooms()
 		c.JSON(200, gin.H{
 			"rooms": rooms,
+		})
+	})
+
+	r.GET("/api/rooms/:roomId/timeline", func(c *gin.Context) {
+		roomIDStr := c.Param("roomId")
+		roomID, err := uuid.Parse(roomIDStr)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid room ID"})
+			return
+		}
+
+		playerIDStr := c.Query("playerId")
+		if playerIDStr != "" {
+			playerID, err := uuid.Parse(playerIDStr)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid player ID"})
+				return
+			}
+			var logs []models.TurnLog
+			if db.DB != nil {
+				db.DB.Where("room_id = ? AND player_id = ?", roomID, playerID).
+					Order("turn_number ASC").
+					Find(&logs)
+			}
+			c.JSON(200, gin.H{"timeline": logs})
+			return
+		}
+
+		var logs []models.TurnLog
+		if db.DB != nil {
+			db.DB.Where("room_id = ?", roomID).
+				Order("turn_number ASC, player_id ASC").
+				Find(&logs)
+		}
+		c.JSON(200, gin.H{"timeline": logs})
+	})
+
+	r.GET("/api/rooms/:roomId/replay", func(c *gin.Context) {
+		roomIDStr := c.Param("roomId")
+		roomID, err := uuid.Parse(roomIDStr)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid room ID"})
+			return
+		}
+
+		var snapshots []models.TurnSnapshot
+		if db.DB != nil {
+			db.DB.Where("room_id = ?", roomID).
+				Order("turn_number ASC").
+				Find(&snapshots)
+		}
+
+		var logs []models.TurnLog
+		if db.DB != nil {
+			db.DB.Where("room_id = ?", roomID).
+				Order("turn_number ASC, player_id ASC").
+				Find(&logs)
+		}
+
+		c.JSON(200, gin.H{
+			"snapshots": snapshots,
+			"timeline":  logs,
 		})
 	})
 

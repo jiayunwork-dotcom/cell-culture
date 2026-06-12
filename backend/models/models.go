@@ -215,3 +215,47 @@ func (c *Contamination) BeforeCreate(tx *gorm.DB) error {
 	}
 	return nil
 }
+
+type TurnLog struct {
+	ID             uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
+	RoomID         uuid.UUID `gorm:"type:uuid;index" json:"roomId"`
+	PlayerID       uuid.UUID `gorm:"type:uuid;index" json:"playerId"`
+	TurnNumber     int       `json:"turnNumber"`
+	OperationTypes []string  `gorm:"type:text[]" json:"operationTypes"`
+	ActionSummary  string    `json:"actionSummary"`
+	CellDelta      float64   `json:"cellDelta"`
+	NewMutations   int       `json:"newMutations"`
+	MoneyIncome    float64   `json:"moneyIncome"`
+	MoneyExpense   float64   `json:"moneyExpense"`
+	MoneyDelta     float64   `json:"moneyDelta"`
+	EnvParams      string    `gorm:"type:text" json:"envParams"`
+	PressureParams string    `gorm:"type:text" json:"pressureParams"`
+	MutagenUsed    string    `json:"mutagenUsed"`
+	MutagenTarget  string    `json:"mutagenTarget"`
+	PassageUsed    bool      `json:"passageUsed"`
+	PassageRatio   float64   `json:"passageRatio"`
+	DiffStarted    string    `json:"diffStarted"`
+	CreatedAt      time.Time `json:"createdAt"`
+}
+
+func (tl *TurnLog) BeforeCreate(tx *gorm.DB) error {
+	if tl.ID == uuid.Nil {
+		tl.ID = uuid.New()
+	}
+	return nil
+}
+
+type TurnSnapshot struct {
+	ID             uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
+	RoomID         uuid.UUID `gorm:"type:uuid;index" json:"roomId"`
+	TurnNumber     int       `json:"turnNumber"`
+	PlayerStates   string    `gorm:"type:text" json:"playerStates"`
+	CreatedAt      time.Time `json:"createdAt"`
+}
+
+func (ts *TurnSnapshot) BeforeCreate(tx *gorm.DB) error {
+	if ts.ID == uuid.Nil {
+		ts.ID = uuid.New()
+	}
+	return nil
+}

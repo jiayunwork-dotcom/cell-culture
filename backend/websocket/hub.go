@@ -136,6 +136,10 @@ func (h *Hub) handleMessage(client *Client, message []byte) {
 		h.handleStartGame(client)
 	case "get_state":
 		h.handleGetState(client)
+	case "get_timeline":
+		h.handleGetTimeline(client)
+	case "get_replay_data":
+		h.handleGetReplayData(client)
 	default:
 		log.Printf("Unknown message type: %s", msg.Type)
 		h.sendError(client, "Unknown message type: "+msg.Type)
@@ -441,6 +445,7 @@ func (h *Hub) buildRoomState(room *game.GameRoom, playerID uuid.UUID) map[string
 			state["differentiations"] = playerData["differentiations"]
 			state["patents"] = playerData["patents"]
 			state["contaminations"] = playerData["contaminations"]
+			state["timeline"] = room.GetTimeline(playerID)
 		}
 	}
 
@@ -509,4 +514,38 @@ func (h *Hub) removeClient(client *Client) {
 		}
 	}
 	h.mu.Unlock()
+}
+
+func (h *Hub) handleGetTimeline(client *Client) {
+	room, exists := h.RoomManager.GetRoom(client.RoomID)
+	if !exists {
+		h.sendError(client, "Room not found")
+		return
+	}
+
+	timeline := room.GetTimeline(client.PlayerID)
+	response := WSMessage{
+		Type: "timeline",
+		Data: timeline,
+	}
+	h.sendToClient(client, response)
+}
+
+func (h *Hub) handleGetReplayData(client *Client) {
+	room, exists := h.RoomManager.GetRoom(client.RoomID)
+	if !exists {
+		h.sendError(client, "Room not found")
+		return
+	}
+
+	snapshots := room.GetReplaySnapshots()
+	allTimeline := room.GetAllTimeline()
+	response := WSMessage{
+		Type: "replay_data",
+		Data: map[string]interface{}{
+			"snapshots": snapshots,
+			"timeline":  allTimeline,
+		},
+	}
+	h.sendToClient(client, response)
 }

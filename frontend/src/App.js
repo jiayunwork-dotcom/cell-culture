@@ -2,12 +2,15 @@ import { useState, useEffect, useCallback } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import HomePage from './pages/HomePage';
 import GamePage from './pages/GamePage';
+import ReplayMode from './components/ReplayMode';
 import { useWebSocket } from './hooks/useWebSocket';
 
 function App() {
   const [wsConnected, setWsConnected] = useState(false);
   const [gameState, setGameState] = useState(null);
   const [player, setPlayer] = useState(null);
+  const [replayMode, setReplayMode] = useState(false);
+  const [replayData, setReplayData] = useState(null);
 
   const wsUrl = process.env.REACT_APP_WS_URL || 'ws://localhost:8080/ws';
 
@@ -40,8 +43,14 @@ function App() {
           auctions: [],
           messages: [],
           submittedCount: 1,
+          timeline: [],
         };
         setGameState(initialState);
+      } else if (data.type === 'timeline') {
+        setGameState(prev => prev ? { ...prev, timeline: data.data } : prev);
+      } else if (data.type === 'replay_data') {
+        setReplayData(data.data);
+        setReplayMode(true);
       }
     } catch (e) {
       console.error('Failed to parse message:', e);
@@ -107,9 +116,45 @@ function App() {
     }));
   }, [sendMessage]);
 
+  const startReplay = useCallback(() => {
+    const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:8080';
+    if (gameState?.room?.id) {
+      fetch(`${apiUrl}/api/rooms/${gameState.room.id}/replay`)
+        .then(res => res.json())
+        .then(data => {
+          setReplayData(data);
+          setReplayMode(true);
+        })
+        .catch(err => {
+          console.error('Failed to fetch replay data:', err);
+          sendMessage(JSON.stringify({
+            type: 'get_replay_data',
+            data: {}
+          }));
+        });
+    } else {
+      sendMessage(JSON.stringify({
+        type: 'get_replay_data',
+        data: {}
+      }));
+    }
+  }, [sendMessage, gameState]);
+
+  const exitReplay = useCallback(() => {
+    setReplayMode(false);
+    setReplayData(null);
+  }, []);
+
   return (
     <Router>
       <div className="min-h-screen bg-darker text-slate-200">
+        {replayMode && replayData && (
+          <ReplayMode
+            replayData={replayData}
+            players={gameState?.players || []}
+            onExit={exitReplay}
+          />
+        )}
         <Routes>
           <Route 
             path="/" 
@@ -136,6 +181,7 @@ function App() {
                   sendChat={sendChat}
                   placeBid={placeBid}
                   wsConnected={wsConnected}
+                  onStartReplay={startReplay}
                 />
               ) : (
                 <Navigate to="/" replace />
