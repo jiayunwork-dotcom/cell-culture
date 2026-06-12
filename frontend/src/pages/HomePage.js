@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { FlaskConical, Users, Play, Plus, Wifi, WifiOff } from 'lucide-react';
+import { useNavigate, Link } from 'react-router-dom';
+import { FlaskConical, Users, Play, Plus, Wifi, WifiOff, FileText } from 'lucide-react';
 
 const COLORS = [
   '#22c55e',
@@ -142,6 +142,17 @@ export default function HomePage({
                 加入房间
               </button>
             </div>
+
+            <Link
+              to="/reports"
+              className="block bg-dark hover:bg-slate-800 border border-slate-700 hover:border-slate-600 text-slate-200 font-semibold py-4 px-6 rounded-xl transition-all text-center"
+            >
+              <div className="flex items-center justify-center gap-2">
+                <FileText className="w-5 h-5 text-accent" />
+                实验报告广场
+              </div>
+              <p className="text-xs text-slate-500 mt-1">查看其他玩家发布的实验报告</p>
+            </Link>
 
             <div className="bg-dark rounded-xl p-6 border border-slate-700">
               <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">

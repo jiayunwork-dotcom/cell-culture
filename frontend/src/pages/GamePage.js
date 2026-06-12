@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { FlaskConical, Users, DollarSign, Trophy, MessageCircle, Gavel, Dna, ThermometerSun, Zap, Send, ClipboardList, Play } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { FlaskConical, Users, DollarSign, Trophy, MessageCircle, Gavel, Dna, ThermometerSun, Zap, Send, ClipboardList, Play, FileText } from 'lucide-react';
 import EnvironmentPanel from '../components/EnvironmentPanel';
 import CellStatusPanel from '../components/CellStatusPanel';
 import MutationPanel from '../components/MutationPanel';
@@ -18,9 +19,12 @@ export default function GamePage({
   sendChat,
   placeBid,
   wsConnected,
-  onStartReplay
+  onStartReplay,
+  onGenerateReport
 }) {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('environment');
+  const [generatingReport, setGeneratingReport] = useState(false);
   const [environment, setEnvironment] = useState(gameState?.environment || {});
   const [selection, setSelection] = useState(gameState?.selection || {});
   const [mutagen, setMutagen] = useState('none');
@@ -322,19 +326,55 @@ export default function GamePage({
                   </div>
                 ))}
             </div>
-            <div className="flex gap-3">
+            <div className="flex flex-col gap-2">
               <button
-                onClick={onStartReplay}
-                className="flex-1 bg-secondary hover:bg-cyan-600 text-white font-semibold py-3 rounded-lg transition-all flex items-center justify-center gap-2"
+                onClick={async () => {
+                  if (generatingReport) return;
+                  setGeneratingReport(true);
+                  try {
+                    const report = await onGenerateReport?.();
+                    if (report) {
+                      navigate(`/report/${report.id}`);
+                    }
+                  } finally {
+                    setGeneratingReport(false);
+                  }
+                }}
+                disabled={generatingReport}
+                className="w-full bg-accent hover:bg-amber-600 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-lg transition-all flex items-center justify-center gap-2"
               >
-                <Play className="w-5 h-5" />
-                回放
+                {generatingReport ? (
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-current"></div>
+                    生成中...
+                  </>
+                ) : (
+                  <>
+                    <FileText className="w-5 h-5" />
+                    生成实验报告
+                  </>
+                )}
               </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={onStartReplay}
+                  className="flex-1 bg-secondary hover:bg-cyan-600 text-white font-semibold py-3 rounded-lg transition-all flex items-center justify-center gap-2"
+                >
+                  <Play className="w-5 h-5" />
+                  回放
+                </button>
+                <button
+                  onClick={() => window.location.reload()}
+                  className="flex-1 bg-primary hover:bg-green-600 text-white font-semibold py-3 rounded-lg transition-all"
+                >
+                  再来一局
+                </button>
+              </div>
               <button
-                onClick={() => window.location.reload()}
-                className="flex-1 bg-primary hover:bg-green-600 text-white font-semibold py-3 rounded-lg transition-all"
+                onClick={() => navigate('/reports')}
+                className="w-full text-slate-400 hover:text-white text-sm py-2 transition-all"
               >
-                再来一局
+                查看报告广场 →
               </button>
             </div>
           </div>

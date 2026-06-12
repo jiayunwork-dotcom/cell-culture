@@ -121,6 +121,115 @@ func main() {
 		})
 	})
 
+	r.POST("/api/reports", func(c *gin.Context) {
+		var body struct {
+			RoomID   string `json:"roomId" binding:"required"`
+			PlayerID string `json:"playerId" binding:"required"`
+		}
+		if err := c.ShouldBindJSON(&body); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		roomID, err := uuid.Parse(body.RoomID)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid room ID"})
+			return
+		}
+
+		playerID, err := uuid.Parse(body.PlayerID)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid player ID"})
+			return
+		}
+
+		report, err := game.GenerateReport(roomID, playerID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(201, gin.H{"report": report})
+	})
+
+	r.GET("/api/reports/:reportId", func(c *gin.Context) {
+		reportIDStr := c.Param("reportId")
+		reportID, err := uuid.Parse(reportIDStr)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid report ID"})
+			return
+		}
+
+		result, err := game.GetReportWithReviews(reportID)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(200, result)
+	})
+
+	r.POST("/api/reports/:reportId/reviews", func(c *gin.Context) {
+		reportIDStr := c.Param("reportId")
+		reportID, err := uuid.Parse(reportIDStr)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid report ID"})
+			return
+		}
+
+		var body struct {
+			ReviewerID   string `json:"reviewerId" binding:"required"`
+			ReviewerName string `json:"reviewerName" binding:"required"`
+			Rating       int    `json:"rating" binding:"required"`
+			Comment      string `json:"comment"`
+		}
+		if err := c.ShouldBindJSON(&body); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		reviewerID, err := uuid.Parse(body.ReviewerID)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid reviewer ID"})
+			return
+		}
+
+		review, err := game.AddReview(reportID, reviewerID, body.ReviewerName, body.Rating, body.Comment)
+		if err != nil {
+			if err.Error() == "you have already reviewed this report" {
+				c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			} else {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			}
+			return
+		}
+
+		c.JSON(201, gin.H{"review": review})
+	})
+
+	r.GET("/api/reports", func(c *gin.Context) {
+		sortBy := c.DefaultQuery("sortBy", "time")
+		cursor := c.Query("cursor")
+		limit := 10
+
+		var reviewerFilter *uuid.UUID
+		reviewerIDStr := c.Query("reviewerId")
+		if reviewerIDStr != "" {
+			rid, err := uuid.Parse(reviewerIDStr)
+			if err == nil {
+				reviewerFilter = &rid
+			}
+		}
+
+		result, err := game.ListReports(sortBy, cursor, limit, reviewerFilter)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(200, result)
+	})
+
 	port := db.GetPort()
 	log.Printf("Server starting on port %d", port)
 	log.Printf("WebSocket endpoint: ws://localhost:%d/ws", port)

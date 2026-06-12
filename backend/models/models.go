@@ -259,3 +259,50 @@ func (ts *TurnSnapshot) BeforeCreate(tx *gorm.DB) error {
 	}
 	return nil
 }
+
+type ExperimentReport struct {
+	ID                uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
+	RoomID            uuid.UUID `gorm:"type:uuid;index" json:"roomId"`
+	PlayerID          uuid.UUID `gorm:"type:uuid;index" json:"playerId"`
+	RoomName          string    `json:"roomName"`
+	PlayerName        string    `json:"playerName"`
+	PlayerColor       string    `json:"playerColor"`
+	TotalTurns        int       `json:"totalTurns"`
+	FinalCellCount    float64   `json:"finalCellCount"`
+	FinalScore        float64   `json:"finalScore"`
+	Rank              int       `json:"rank"`
+	EnvEvolutionData  string    `gorm:"type:text" json:"envEvolutionData"`
+	CellGrowthData    string    `gorm:"type:text" json:"cellGrowthData"`
+	MutationLineage   string    `gorm:"type:text" json:"mutationLineage"`
+	MutationCumulative string   `gorm:"type:text" json:"mutationCumulative"`
+	KeyTurningPoints  string    `gorm:"type:text" json:"keyTurningPoints"`
+	StrategyAnalysis  string    `gorm:"type:text" json:"strategyAnalysis"`
+	AvgRating         float64   `gorm:"default:0" json:"avgRating"`
+	ReviewCount       int       `gorm:"default:0" json:"reviewCount"`
+	CreatedAt         time.Time `json:"createdAt"`
+	UpdatedAt         time.Time `json:"updatedAt"`
+}
+
+func (er *ExperimentReport) BeforeCreate(tx *gorm.DB) error {
+	if er.ID == uuid.Nil {
+		er.ID = uuid.New()
+	}
+	return nil
+}
+
+type ReportReview struct {
+	ID           uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
+	ReportID     uuid.UUID `gorm:"type:uuid;index" json:"reportId"`
+	ReviewerID   uuid.UUID `gorm:"type:uuid;index" json:"reviewerId"`
+	ReviewerName string    `json:"reviewerName"`
+	Rating       int       `json:"rating"`
+	Comment      string    `gorm:"type:text" json:"comment"`
+	CreatedAt    time.Time `json:"createdAt"`
+}
+
+func (rr *ReportReview) BeforeCreate(tx *gorm.DB) error {
+	if rr.ID == uuid.Nil {
+		rr.ID = uuid.New()
+	}
+	return nil
+}

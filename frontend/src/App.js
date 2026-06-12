@@ -2,8 +2,11 @@ import { useState, useEffect, useCallback } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import HomePage from './pages/HomePage';
 import GamePage from './pages/GamePage';
+import ReportsPage from './pages/ReportsPage';
+import ReportDetailPage from './pages/ReportDetailPage';
 import ReplayMode from './components/ReplayMode';
 import { useWebSocket } from './hooks/useWebSocket';
+import { generateReport } from './api/reports';
 
 function App() {
   const [wsConnected, setWsConnected] = useState(false);
@@ -145,6 +148,21 @@ function App() {
     setReplayData(null);
   }, []);
 
+  const handleGenerateReport = useCallback(async () => {
+    if (!gameState?.room?.id || !player?.id) {
+      alert('游戏数据不完整');
+      return null;
+    }
+    try {
+      const report = await generateReport(gameState.room.id, player.id);
+      return report;
+    } catch (err) {
+      console.error('Failed to generate report:', err);
+      alert(err.message || '生成报告失败');
+      return null;
+    }
+  }, [gameState, player]);
+
   return (
     <Router>
       <div className="min-h-screen bg-darker text-slate-200">
@@ -182,12 +200,15 @@ function App() {
                   placeBid={placeBid}
                   wsConnected={wsConnected}
                   onStartReplay={startReplay}
+                  onGenerateReport={handleGenerateReport}
                 />
               ) : (
                 <Navigate to="/" replace />
               )
             } 
           />
+          <Route path="/reports" element={<ReportsPage />} />
+          <Route path="/report/:reportId" element={<ReportDetailPage />} />
         </Routes>
       </div>
     </Router>
