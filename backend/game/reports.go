@@ -464,7 +464,7 @@ func joinStrs(parts []string, sep string) string {
 	return result
 }
 
-func GetReportWithReviews(reportID uuid.UUID) (map[string]interface{}, error) {
+func GetReportWithReviews(reportID uuid.UUID, voterID string) (map[string]interface{}, error) {
 	if db.DB == nil {
 		return nil, fmt.Errorf("database not available")
 	}
@@ -481,12 +481,139 @@ func GetReportWithReviews(reportID uuid.UUID) (map[string]interface{}, error) {
 		reviews = []models.ReportReview{}
 	}
 
+	reviewIDs := make([]uuid.UUID, 0, len(reviews))
+	for _, r := range reviews {
+		reviewIDs = append(reviewIDs, r.ID)
+	}
+
+	type voteCount struct {
+		ReviewID uuid.UUID
+		VoteType string
+		Count    int64
+	}
+	var voteCounts []voteCount
+	if len(reviewIDs) > 0 {
+		db.DB.Model(&models.ReviewVote{}).
+			Select("review_id, vote_type, count(*) as count").
+			Where("review_id IN ?", reviewIDs).
+			Group("review_id, vote_type").
+			Scan(&voteCounts)
+	}
+
+	countsMap := make(map[uuid.UUID]map[string]int64)
+	for _, vc := range voteCounts {
+		if countsMap[vc.ReviewID] == nil {
+			countsMap[vc.ReviewID] = map[string]int64{"up": 0, "down": 0}
+		}
+		countsMap[vc.ReviewID][vc.VoteType] = vc.Count
+	}
+
+	var userVotes []models.ReviewVote
+	userVotesMap := make(map[uuid.UUID]string)
+	if voterID != "" && len(reviewIDs) > 0 {
+		db.DB.Where("review_id IN ? AND voter_id = ?", reviewIDs, voterID).
+			Find(&userVotes)
+		for _, uv := range userVotes {
+			userVotesMap[uv.ReviewID] = uv.VoteType
+		}
+	}
+
+	reviewsWithVotes := make([]map[string]interface{}, 0, len(reviews))
+	for _, r := range reviews {
+		cm := countsMap[r.ID]
+		if cm == nil {
+			cm = map[string]int64{"up": 0, "down": 0}
+		}
+		reviewsWithVotes = append(reviewsWithVotes, map[string]interface{}{
+			"id":           r.ID,
+			"reportId":     r.ReportID,
+			"reviewerId":   r.ReviewerID,
+			"reviewerName": r.ReviewerName,
+			"rating":       r.Rating,
+			"comment":      r.Comment,
+			"createdAt":    r.CreatedAt,
+			"upvotes":      cm["up"],
+			"downvotes":    cm["down"],
+			"myVote":       userVotesMap[r.ID],
+		})
+	}
+
 	result := map[string]interface{}{
 		"report":  report,
-		"reviews": reviews,
+		"reviews": reviewsWithVotes,
 	}
 
 	return result, nil
+}
+
+func VoteReview(reviewID uuid.UUID, voterID string, voteType string) (map[string]interface{}, error) {
+	if db.DB == nil {
+		return nil, fmt.Errorf("database not available")
+	}
+	if voteType != "up" && voteType != "down" && voteType != "none" {
+		return nil, fmt.Errorf("invalid vote type")
+	}
+	if voterID == "" {
+		return nil, fmt.Errorf("voter ID is required")
+	}
+
+	var existing models.ReviewVote
+	err := db.DB.Where("review_id = ? AND voter_id = ?", reviewID, voterID).First(&existing).Error
+
+	if voteType == "none" {
+		if err == nil {
+			if delErr := db.DB.Delete(&existing).Error; delErr != nil {
+				return nil, fmt.Errorf("failed to remove vote: %v", delErr)
+			}
+		}
+	} else {
+		if err == nil {
+			if existing.VoteType == voteType {
+				if delErr := db.DB.Delete(&existing).Error; delErr != nil {
+					return nil, fmt.Errorf("failed to remove vote: %v", delErr)
+				}
+			} else {
+				existing.VoteType = voteType
+				existing.UpdatedAt = time.Now()
+				if saveErr := db.DB.Save(&existing).Error; saveErr != nil {
+					return nil, fmt.Errorf("failed to update vote: %v", saveErr)
+				}
+			}
+		} else {
+			newVote := &models.ReviewVote{
+				ReviewID:  reviewID,
+				VoterID:   voterID,
+				VoteType:  voteType,
+				CreatedAt: time.Now(),
+				UpdatedAt: time.Now(),
+			}
+			if createErr := db.DB.Create(newVote).Error; createErr != nil {
+				return nil, fmt.Errorf("failed to create vote: %v", createErr)
+			}
+		}
+	}
+
+	var upCount int64
+	db.DB.Model(&models.ReviewVote{}).
+		Where("review_id = ? AND vote_type = ?", reviewID, "up").
+		Count(&upCount)
+
+	var downCount int64
+	db.DB.Model(&models.ReviewVote{}).
+		Where("review_id = ? AND vote_type = ?", reviewID, "down").
+		Count(&downCount)
+
+	var finalVote models.ReviewVote
+	var myVote string
+	if findErr := db.DB.Where("review_id = ? AND voter_id = ?", reviewID, voterID).First(&finalVote).Error; findErr == nil {
+		myVote = finalVote.VoteType
+	}
+
+	return map[string]interface{}{
+		"upvotes":   upCount,
+		"downvotes": downCount,
+		"myVote":    myVote,
+	}, nil
 }
 
 func AddReview(reportID uuid.UUID, reviewerID uuid.UUID, reviewerName string, rating int, comment string) (*models.ReportReview, error) {
@@ -540,7 +667,7 @@ func AddReview(reportID uuid.UUID, reviewerID uuid.UUID, reviewerName string, ra
 	return review, nil
 }
 
-func ListReports(sortBy string, cursor string, limit int, reviewerFilter *uuid.UUID) (map[string]interface{}, error) {
+func ListReports(sortBy string, cursor string, limit int, reviewerFilter *uuid.UUID, minScore *float64, maxScore *float64, roomNameQ string) (map[string]interface{}, error) {
 	if db.DB == nil {
 		return nil, fmt.Errorf("database not available")
 	}
@@ -559,6 +686,16 @@ func ListReports(sortBy string, cursor string, limit int, reviewerFilter *uuid.U
 			Select("report_id").
 			Where("reviewer_id = ?", *reviewerFilter)
 		query = query.Where("id IN (?)", subQuery)
+	}
+
+	if minScore != nil {
+		query = query.Where("final_score >= ?", *minScore)
+	}
+	if maxScore != nil {
+		query = query.Where("final_score <= ?", *maxScore)
+	}
+	if roomNameQ != "" {
+		query = query.Where("room_name ILIKE ?", "%"+roomNameQ+"%")
 	}
 
 	orderStr := "created_at DESC"
@@ -611,6 +748,36 @@ func ListReports(sortBy string, cursor string, limit int, reviewerFilter *uuid.U
 		reports = reports[:limit]
 	}
 
+	reportsWithSeries := make([]map[string]interface{}, 0, len(reports))
+	for _, r := range reports {
+		cellCountSeries := make([]float64, 0)
+		if r.CellGrowthData != "" {
+			var growthData []CellGrowthPoint
+			if err := json.Unmarshal([]byte(r.CellGrowthData), &growthData); err == nil {
+				for _, gp := range growthData {
+					cellCountSeries = append(cellCountSeries, gp.TotalCells)
+				}
+			}
+		}
+		reportsWithSeries = append(reportsWithSeries, map[string]interface{}{
+			"id":              r.ID,
+			"roomId":          r.RoomID,
+			"playerId":        r.PlayerID,
+			"roomName":        r.RoomName,
+			"playerName":      r.PlayerName,
+			"playerColor":     r.PlayerColor,
+			"totalTurns":      r.TotalTurns,
+			"finalCellCount":  r.FinalCellCount,
+			"finalScore":      r.FinalScore,
+			"rank":            r.Rank,
+			"avgRating":       r.AvgRating,
+			"reviewCount":     r.ReviewCount,
+			"createdAt":       r.CreatedAt,
+			"updatedAt":       r.UpdatedAt,
+			"cellCountSeries": cellCountSeries,
+		})
+	}
+
 	nextCursor := ""
 	if hasMore && len(reports) > 0 {
 		last := reports[len(reports)-1]
@@ -618,9 +785,44 @@ func ListReports(sortBy string, cursor string, limit int, reviewerFilter *uuid.U
 	}
 
 	return map[string]interface{}{
-		"reports":    reports,
+		"reports":    reportsWithSeries,
 		"nextCursor": nextCursor,
 		"hasMore":    hasMore,
+	}, nil
+}
+
+func ListRoomReportsForCompare(reportID uuid.UUID) (map[string]interface{}, error) {
+	if db.DB == nil {
+		return nil, fmt.Errorf("database not available")
+	}
+
+	var report models.ExperimentReport
+	if err := db.DB.Where("id = ?", reportID).First(&report).Error; err != nil {
+		return nil, fmt.Errorf("report not found")
+	}
+
+	var roomReports []models.ExperimentReport
+	if err := db.DB.Where("room_id = ? AND id != ?", report.RoomID, reportID).
+		Order("rank ASC").
+		Find(&roomReports).Error; err != nil {
+		return nil, fmt.Errorf("failed to list room reports: %v", err)
+	}
+
+	compareList := make([]map[string]interface{}, 0, len(roomReports))
+	for _, r := range roomReports {
+		compareList = append(compareList, map[string]interface{}{
+			"id":             r.ID,
+			"playerId":       r.PlayerID,
+			"playerName":     r.PlayerName,
+			"playerColor":    r.PlayerColor,
+			"finalCellCount": r.FinalCellCount,
+			"finalScore":     r.FinalScore,
+			"rank":           r.Rank,
+		})
+	}
+
+	return map[string]interface{}{
+		"roomReports": compareList,
 	}, nil
 }
 

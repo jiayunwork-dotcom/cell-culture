@@ -306,3 +306,19 @@ func (rr *ReportReview) BeforeCreate(tx *gorm.DB) error {
 	}
 	return nil
 }
+
+type ReviewVote struct {
+	ID         uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
+	ReviewID   uuid.UUID `gorm:"type:uuid;index:idx_review_voter,unique" json:"reviewId"`
+	VoterID    string    `gorm:"type:varchar(100);index:idx_review_voter,unique" json:"voterId"`
+	VoteType   string    `gorm:"type:varchar(10)" json:"voteType"`
+	CreatedAt  time.Time `json:"createdAt"`
+	UpdatedAt  time.Time `json:"updatedAt"`
+}
+
+func (rv *ReviewVote) BeforeCreate(tx *gorm.DB) error {
+	if rv.ID == uuid.Nil {
+		rv.ID = uuid.New()
+	}
+	return nil
+}

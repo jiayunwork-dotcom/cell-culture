@@ -64,6 +64,7 @@ func InitDB() {
 		&models.TurnSnapshot{},
 		&models.ExperimentReport{},
 		&models.ReportReview{},
+		&models.ReviewVote{},
 	)
 	if err != nil {
 		log.Printf("Failed to migrate database: %v", err)

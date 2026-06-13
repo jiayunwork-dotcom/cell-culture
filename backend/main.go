@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 
 	"cell-culture/cache"
 	"cell-culture/db"
@@ -160,9 +161,54 @@ func main() {
 			return
 		}
 
-		result, err := game.GetReportWithReviews(reportID)
+		voterID := c.Query("voterId")
+
+		result, err := game.GetReportWithReviews(reportID, voterID)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(200, result)
+	})
+
+	r.POST("/api/reviews/:reviewId/vote", func(c *gin.Context) {
+		reviewIDStr := c.Param("reviewId")
+		reviewID, err := uuid.Parse(reviewIDStr)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid review ID"})
+			return
+		}
+
+		var body struct {
+			VoterID  string `json:"voterId" binding:"required"`
+			VoteType string `json:"voteType" binding:"required"`
+		}
+		if err := c.ShouldBindJSON(&body); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		result, err := game.VoteReview(reviewID, body.VoterID, body.VoteType)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(200, result)
+	})
+
+	r.GET("/api/reports/:reportId/room-reports", func(c *gin.Context) {
+		reportIDStr := c.Param("reportId")
+		reportID, err := uuid.Parse(reportIDStr)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid report ID"})
+			return
+		}
+
+		result, err := game.ListRoomReportsForCompare(reportID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 
@@ -221,7 +267,22 @@ func main() {
 			}
 		}
 
-		result, err := game.ListReports(sortBy, cursor, limit, reviewerFilter)
+		var minScore *float64
+		var maxScore *float64
+		if ms := c.Query("minScore"); ms != "" {
+			if v, err := strconv.ParseFloat(ms, 64); err == nil {
+				minScore = &v
+			}
+		}
+		if ms := c.Query("maxScore"); ms != "" {
+			if v, err := strconv.ParseFloat(ms, 64); err == nil {
+				maxScore = &v
+			}
+		}
+
+		roomNameQ := c.Query("roomName")
+
+		result, err := game.ListReports(sortBy, cursor, limit, reviewerFilter, minScore, maxScore, roomNameQ)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
